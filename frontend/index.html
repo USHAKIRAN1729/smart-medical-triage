@@ -119,7 +119,7 @@ document.getElementById("btn").addEventListener("click", async () => {
   }
 
   try {
-    const res = await fetch("http://127.0.0.1:8000/predict_specialist", {
+    const res = await fetch("https://smart-medical-triage-1.onrender.com/predict_specialist", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ symptom_text: text })
