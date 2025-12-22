@@ -1,15 +1,13 @@
 # Virtual environments
-triage/
 venv/
-env/
+triage/
 
 # Python cache
 __pycache__/
 *.pyc
 
-# Large generated files
-*.npy
-
 # OS files
 .DS_Store
-Thumbs.db
+
+# Model cache
+.cache/
