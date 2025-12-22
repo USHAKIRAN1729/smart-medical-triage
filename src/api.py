@@ -1,3 +1,4 @@
+import os
 import json
 import numpy as np
 from fastapi import FastAPI
@@ -23,8 +24,16 @@ class Input(BaseModel):
 # ------------------ Load models & data ------------------
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
-centroids = json.load(open("../data/snapshots.json"))
-cluster_map = json.load(open("../data/cluster_mappings.json"))
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+with open(os.path.join(DATA_DIR, "snapshots.json")) as f:
+    centroids = json.load(f)
+
+with open(os.path.join(DATA_DIR, "cluster_mappings.json")) as f:
+    cluster_map = json.load(f)
+
 centroid_vectors = np.array(list(centroids.values()))
 
 # ------------------ Validation helpers ------------------
