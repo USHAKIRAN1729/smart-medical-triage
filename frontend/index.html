@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Smart Medical Triage</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #74ebd5, #acb6e5);
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+    }
+
+    .card {
+      background: #ffffff;
+      padding: 25px 30px;
+      width: 420px;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 15px;
+      color: #333;
+    }
+
+    textarea {
+      width: 100%;
+      height: 80px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      resize: none;
+      font-size: 14px;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 15px;
+      padding: 12px;
+      background-color: #4CAF50;
+      color: white;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f4f6f8;
+      border-radius: 8px;
+      display: none;
+    }
+
+    .label {
+      font-weight: bold;
+      color: #555;
+    }
+
+    .value {
+      color: #222;
+      margin-bottom: 8px;
+    }
+
+    .error {
+      color: red;
+      text-align: center;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="card">
+  <h2>Smart Medical Triage System</h2>
+
+  <textarea id="symptom" placeholder="Enter your symptoms here..."></textarea>
+
+  <button id="btn">Get Recommendation</button>
+
+  <div class="result" id="resultBox">
+    <div class="value">
+      <span class="label">Disease:</span>
+      <span id="disease"></span>
+    </div>
+    <div class="value">
+      <span class="label">Recommended Specialist:</span>
+      <span id="specialist"></span>
+    </div>
+  </div>
+
+  <div class="error" id="errorBox"></div>
+</div>
+
+<script>
+document.getElementById("btn").addEventListener("click", async () => {
+  const text = document.getElementById("symptom").value.trim();
+  const resultBox = document.getElementById("resultBox");
+  const errorBox = document.getElementById("errorBox");
+
+  resultBox.style.display = "none";
+  errorBox.textContent = "";
+
+  if (!text) {
+    errorBox.textContent = "Please enter symptoms.";
+    return;
+  }
+
+  try {
+    const res = await fetch("http://127.0.0.1:8000/predict_specialist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symptom_text: text })
+    });
+
+    const data = await res.json();
+
+    document.getElementById("disease").textContent =
+      data.disease_label || "N/A";
+
+    document.getElementById("specialist").textContent =
+      data.recommended_specialist || "N/A";
+
+    resultBox.style.display = "block";
+
+  } catch (e) {
+    errorBox.textContent = "Unable to connect to server.";
+  }
+});
+</script>
+
+</body>
+</html>
