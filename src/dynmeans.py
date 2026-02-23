@@ -1,7 +1,7 @@
 import numpy as np
 
 class DynMeans:
-    def __init__(self, lambda_dist=0.8, max_inactive=3):
+    def __init__(self, lambda_dist=0.75, max_inactive=3):
         self.lambda_dist = lambda_dist
         self.max_inactive = max_inactive
         self.centers = []
@@ -12,7 +12,7 @@ class DynMeans:
         labels = []
 
         for x in X:
-            if not self.centers:
+            if len(self.centers) == 0:
                 self.centers.append(x.copy())
                 self.counts.append(1)
                 self.inactive.append(0)
