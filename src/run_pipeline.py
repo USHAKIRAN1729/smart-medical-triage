@@ -9,9 +9,8 @@ def run_pipeline():
 
     df = preprocess()
     X = generate_embeddings(df["symptom_clean"].tolist())
-    np.save("../data/embeddings.npy", X)
 
-    dyn = DynMeans(lambda_dist=0.8, max_inactive=3)
+    dyn = DynMeans(lambda_dist=0.75, max_inactive=3)
 
     labels = []
     batch_size = 100
@@ -25,8 +24,12 @@ def run_pipeline():
     for c in sorted(df.cluster.unique()):
         diseases = df[df.cluster == c]["disease"]
         counts = diseases.value_counts()
-        confidence = counts.max() / counts.sum()
-        cluster_map[str(int(c))] = counts.idxmax() if confidence >= 0.25 else "Unknown"
+
+        # Stronger mapping rule
+        if counts.max() / counts.sum() >= 0.4:
+            cluster_map[str(int(c))] = counts.idxmax()
+        else:
+            cluster_map[str(int(c))] = "Unknown"
 
     with open("../data/cluster_mappings.json", "w") as f:
         json.dump(cluster_map, f, indent=2)
