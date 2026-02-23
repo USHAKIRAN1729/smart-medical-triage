@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# ------------------ App setup ------------------
+# ------------------ App Setup ------------------
 app = FastAPI(title="Smart Medical Triage API")
 
 app.add_middleware(
@@ -20,60 +20,50 @@ app.add_middleware(
 class Input(BaseModel):
     symptom_text: str
 
-# ------------------ Lazy model loading ------------------
-model = None
+# ------------------ Load Model ------------------
+model = SentenceTransformer("paraphrase-MiniLM-L3-v2")
 
-def get_model():
-    global model
-    if model is None:
-        model = SentenceTransformer("paraphrase-MiniLM-L3-v2")
-    return model
-
-# ------------------ Load centroids & mappings ------------------
-
+# ------------------ Load Training Data ------------------
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
-with open(os.path.join(DATA_DIR, "snapshots.json")) as f:
-    centroids = json.load(f)
+# Load cleaned dataset
+data = np.load(os.path.join(DATA_DIR, "embeddings.npy"))
+with open(os.path.join(DATA_DIR, "Symptom2Disease_cleaned.csv"), "r", encoding="utf-8") as f:
+    import pandas as pd
+    df = pd.read_csv(f)
 
-with open(os.path.join(DATA_DIR, "cluster_mappings.json")) as f:
-    cluster_map = json.load(f)
-
-centroid_vectors = np.array(list(centroids.values()))
-
-# ------------------ Validation ------------------
-
-GENERIC_SYMPTOMS = [
-    "fever", "pain", "fatigue", "weakness", "tiredness", "body pain"
-]
-
-def is_generic_only(text: str) -> bool:
-    words = text.lower().split()
-    return len(words) <= 3 and any(w in GENERIC_SYMPTOMS for w in words)
-
-def is_medical(text: str) -> bool:
-    medical_words = [
-        "fever","pain","cough","rash","itch","vomit","headache",
-        "breath","chest","diarrhea","nausea","stomach","burning",
-        "vision","dizziness","skin","redness","patch","peeling",
-        "loose","weakness","tiredness"
-    ]
-    return any(w in text.lower() for w in medical_words)
+train_embeddings = data
+train_diseases = df["disease"].tolist()
 
 # ------------------ Specialist Mapping ------------------
 
 def map_specialist(disease: str) -> str:
     d = disease.lower()
-    if "pneumonia" in d:
+
+    if any(x in d for x in ["pneumonia", "asthma", "bronchitis"]):
         return "Pulmonologist"
-    if "fungal" in d:
+
+    if any(x in d for x in ["fungal", "eczema", "psoriasis", "allergy"]):
         return "Dermatologist"
-    if "malaria" in d or "dengue" in d:
+
+    if any(x in d for x in ["malaria", "dengue", "typhoid", "viral"]):
         return "General Physician"
+
     return "General Physician"
 
-# ------------------ Prediction Endpoint ------------------
+# ------------------ Validation ------------------
+
+def is_medical(text: str) -> bool:
+    medical_words = [
+        "fever","pain","cough","cold","rash","itch",
+        "vomit","headache","breath","chest","diarrhea",
+        "nausea","stomach","burning","vision","dizziness",
+        "skin","weakness","tiredness"
+    ]
+    return any(word in text.lower() for word in medical_words)
+
+# ------------------ Prediction ------------------
 
 @app.post("/predict_specialist")
 async def predict(data: Input):
@@ -82,53 +72,39 @@ async def predict(data: Input):
 
     if not text:
         return {
-            "cluster_id": None,
             "disease_label": "No input provided",
             "recommended_specialist": "N/A",
             "confidence": 0.0
         }
 
-    # Medical validation
     if not is_medical(text):
         return {
-            "cluster_id": None,
             "disease_label": "Not a medical symptom",
             "recommended_specialist": "N/A",
             "confidence": 0.0
         }
 
-    # Generic-only check
-    if is_generic_only(text):
-        return {
-            "cluster_id": None,
-            "disease_label": "General symptoms",
-            "recommended_specialist": "General Physician",
-            "confidence": 0.4
-        }
-
-    # Embedding
-    model = get_model()
+    # Generate embedding
     emb = model.encode([text])
 
-    # Cosine similarity (Better than Euclidean)
-    sim = cosine_similarity(emb, centroid_vectors)
-    idx = int(np.argmax(sim))
-    confidence = float(round(sim[0][idx], 3))
+    # Compare with ALL training embeddings
+    similarities = cosine_similarity(emb, train_embeddings)[0]
 
-    # Low confidence threshold
-    if confidence < 0.25:
+    best_idx = int(np.argmax(similarities))
+    confidence = float(round(similarities[best_idx], 3))
+
+    disease = train_diseases[best_idx]
+    specialist = map_specialist(disease)
+
+    # If extremely low similarity → fallback
+    if confidence < 0.2:
         return {
-            "cluster_id": None,
             "disease_label": "Symptoms unclear. Please provide more details.",
             "recommended_specialist": "General Physician",
             "confidence": confidence
         }
 
-    disease = cluster_map.get(str(idx), "Unknown")
-    specialist = map_specialist(disease)
-
     return {
-        "cluster_id": idx,
         "disease_label": disease,
         "recommended_specialist": specialist,
         "confidence": confidence
