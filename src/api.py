@@ -116,7 +116,7 @@ async def predict(data: Input):
     confidence = float(round(sim[0][idx], 3))
 
     # Low confidence threshold
-    if confidence < 0.4:
+    if confidence < 0.25:
         return {
             "cluster_id": None,
             "disease_label": "Symptoms unclear. Please provide more details.",
