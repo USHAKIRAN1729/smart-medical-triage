@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Smart Medical Triage System</title>
+  <title>Smart Medical Triage</title>
 
   <style>
     body {
-      font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #4e73df, #1cc88a);
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #74ebd5, #acb6e5);
       height: 100vh;
       display: flex;
       align-items: center;
@@ -17,24 +17,23 @@
 
     .card {
       background: #ffffff;
-      padding: 30px;
-      width: 450px;
-      border-radius: 15px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-      transition: 0.3s ease;
+      padding: 25px 30px;
+      width: 430px;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
     }
 
     h2 {
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
       color: #333;
     }
 
     textarea {
       width: 100%;
-      height: 90px;
-      padding: 12px;
-      border-radius: 10px;
+      height: 80px;
+      padding: 10px;
+      border-radius: 8px;
       border: 1px solid #ccc;
       resize: none;
       font-size: 14px;
@@ -48,9 +47,9 @@
       color: white;
       font-size: 16px;
       border: none;
-      border-radius: 10px;
+      border-radius: 8px;
       cursor: pointer;
-      transition: 0.3s ease;
+      transition: 0.3s;
     }
 
     button:hover {
@@ -58,17 +57,49 @@
     }
 
     button:disabled {
-      background-color: #999;
+      background-color: #9E9E9E;
       cursor: not-allowed;
     }
 
+    /* Spinner */
+    .spinner {
+      display: none;
+      margin: 15px auto;
+      width: 40px;
+      height: 40px;
+      border: 5px solid #ddd;
+      border-top: 5px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      text-align: center;
+      font-size: 14px;
+      color: #555;
+      display: none;
+    }
+
+    /* Result Animation */
     .result {
       margin-top: 20px;
       padding: 15px;
-      background: #f8f9fc;
-      border-radius: 10px;
+      background: #f4f6f8;
+      border-radius: 8px;
       display: none;
-      border-left: 5px solid #4CAF50;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    .result.show {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
     }
 
     .label {
@@ -76,75 +107,106 @@
       color: #555;
     }
 
-    .value {
-      color: #222;
-      margin-bottom: 10px;
+    .confidence-container {
+      margin-top: 10px;
     }
 
-    .confidence {
+    .confidence-bar {
+      width: 100%;
+      height: 20px;
+      background-color: #ddd;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .confidence-fill {
+      height: 100%;
+      width: 0%;
+      background-color: green;
+      transition: width 0.6s ease;
+    }
+
+    .confidence-text {
+      margin-top: 5px;
+      font-size: 14px;
+      text-align: right;
+    }
+
+    /* Medical Disclaimer */
+    .disclaimer {
+      margin-top: 15px;
+      padding: 12px;
+      background-color: #fff3cd;
+      border-left: 5px solid #ffc107;
+      border-radius: 6px;
       font-size: 13px;
-      color: #777;
+      color: #856404;
     }
 
     .error {
       color: red;
       text-align: center;
       margin-top: 10px;
-      font-size: 14px;
     }
 
-    .loading {
-      text-align: center;
-      margin-top: 10px;
-      font-size: 14px;
-      color: #444;
-      display: none;
-    }
   </style>
 </head>
 
 <body>
 
 <div class="card">
-  <h2>🏥 Smart Medical Triage System</h2>
+  <h2>Smart Medical Triage System</h2>
 
-  <textarea id="symptom" placeholder="Enter your symptoms here... (e.g., fever and cough)"></textarea>
+  <textarea id="symptom" placeholder="Enter your symptoms here..."></textarea>
 
   <button id="btn">Get Recommendation</button>
 
-  <div class="loading" id="loadingText">Processing... Please wait.</div>
+  <div class="spinner" id="spinner"></div>
+  <div class="loading-text" id="loadingText">Analyzing symptoms...</div>
 
   <div class="result" id="resultBox">
-    <div class="value">
+
+    <div>
       <span class="label">Disease:</span>
       <span id="disease"></span>
     </div>
 
-    <div class="value">
+    <div>
       <span class="label">Recommended Specialist:</span>
       <span id="specialist"></span>
     </div>
 
-    <div class="confidence">
-      Confidence Score: <span id="confidence"></span>
+    <div class="confidence-container">
+      <div class="label">Confidence Level:</div>
+      <div class="confidence-bar">
+        <div class="confidence-fill" id="confidenceFill"></div>
+      </div>
+      <div class="confidence-text" id="confidenceText"></div>
     </div>
+
+    <!-- Medical Disclaimer -->
+    <div class="disclaimer">
+      ⚠ <strong>Medical Disclaimer:</strong> This system provides AI-based recommendations 
+      for educational purposes only. It is not a substitute for professional medical advice. 
+      Please consult a qualified healthcare provider for accurate diagnosis and treatment.
+    </div>
+
   </div>
 
   <div class="error" id="errorBox"></div>
 </div>
 
 <script>
-
-const API_URL = "https://smart-medical-triage-1.onrender.com/predict_specialist";
-
 document.getElementById("btn").addEventListener("click", async () => {
 
   const text = document.getElementById("symptom").value.trim();
   const resultBox = document.getElementById("resultBox");
   const errorBox = document.getElementById("errorBox");
+  const spinner = document.getElementById("spinner");
   const loadingText = document.getElementById("loadingText");
   const button = document.getElementById("btn");
 
+  resultBox.classList.remove("show");
   resultBox.style.display = "none";
   errorBox.textContent = "";
 
@@ -153,19 +215,16 @@ document.getElementById("btn").addEventListener("click", async () => {
     return;
   }
 
-  button.disabled = true;
+  spinner.style.display = "block";
   loadingText.style.display = "block";
+  button.disabled = true;
 
   try {
-    const res = await fetch(API_URL, {
+    const res = await fetch("https://smart-medical-triage-1.onrender.com/predict_specialist", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ symptom_text: text })
     });
-
-    if (!res.ok) {
-      throw new Error("Server error");
-    }
 
     const data = await res.json();
 
@@ -175,20 +234,41 @@ document.getElementById("btn").addEventListener("click", async () => {
     document.getElementById("specialist").textContent =
       data.recommended_specialist || "N/A";
 
-    document.getElementById("confidence").textContent =
-      data.confidence !== undefined ? data.confidence : "N/A";
+    const confidence = data.confidence || 0;
+    const percentage = Math.round(confidence * 100);
+
+    const fill = document.getElementById("confidenceFill");
+    const textDisplay = document.getElementById("confidenceText");
+
+    fill.style.width = percentage + "%";
+    textDisplay.textContent = percentage + "%";
+
+    if (percentage >= 60) {
+      fill.style.backgroundColor = "#4CAF50";
+    } else if (percentage >= 40) {
+      fill.style.backgroundColor = "#FFC107";
+    } else {
+      fill.style.backgroundColor = "#F44336";
+    }
+
+    spinner.style.display = "none";
+    loadingText.style.display = "none";
+    button.disabled = false;
 
     resultBox.style.display = "block";
 
+    setTimeout(() => {
+      resultBox.classList.add("show");
+    }, 50);
+
   } catch (e) {
-    errorBox.textContent = "Unable to connect to server. Please try again.";
+    errorBox.textContent = "Unable to connect to server.";
+    spinner.style.display = "none";
+    loadingText.style.display = "none";
+    button.disabled = false;
   }
 
-  loadingText.style.display = "none";
-  button.disabled = false;
-
 });
-
 </script>
 
 </body>
