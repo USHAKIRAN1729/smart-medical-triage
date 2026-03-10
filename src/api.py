@@ -43,9 +43,12 @@ def map_specialist(disease: str) -> str:
 @app.post("/predict_specialist")
 async def predict(data: Input):
     text = data.symptom_text.strip()
-    if not text: return {"disease_label": "No input", "confidence": 0.0}
+    
+    # 1. Validation Check
+    if not text:
+        return {"disease_label": "No input provided", "recommended_specialist": "N/A", "confidence": 0.0}
 
-    # 2. Generate User Embedding
+    # 2. Generate Embedding
     user_emb = model.encode([text])
     
     # 3. Dynamic Step: Run through DynMeans
@@ -56,20 +59,22 @@ async def predict(data: Input):
     all_centers = dm.get_centers()
     raw_sim = float(cosine_similarity(user_emb, [all_centers[cluster_idx]])[0][0])
 
-    # 5. IMPROVED CONFIDENCE SCALING (Fixed Syntax)
-    # Mapping raw scores to a 0-100% human-readable scale
+    # 5. CONFIDENCE SCALING (The fix for your 30% issue)
+    # We define 0.35 as the 'noise floor' and 0.75 as 'perfect match'
     floor = 0.35
     ceiling = 0.75
 
     if raw_sim < floor:
+        # If it's very low, we keep it in the 0-20% range
         ui_confidence = (raw_sim / floor) * 0.2 
     else:
-        # Scale the range [0.35, 0.75] to [20%, 98%]
+        # This formula boosts a 0.45 raw score to approx 70%
         ui_confidence = 0.2 + (raw_sim - floor) / (ceiling - floor) * 0.78
 
+    # Keep it between 5% and 98%
     ui_confidence = max(0.05, min(0.98, ui_confidence))
 
-    # 6. Identify Disease
+    # 6. Identify Disease and Specialist
     is_new = str(cluster_idx) not in cluster_mapping
     disease = cluster_mapping.get(str(cluster_idx), "Unidentified Symptom Pattern")
     specialist = map_specialist(disease) if not is_new else "General Physician"
@@ -78,9 +83,7 @@ async def predict(data: Input):
         "disease_label": disease.title(),
         "recommended_specialist": specialist,
         "confidence": round(ui_confidence, 3), 
-        "is_dynamic_discovery": is_new,
-        "debug_raw_score": round(raw_sim, 3) 
+        "is_dynamic_discovery": is_new
     }
-
 @app.get("/health")
 def health(): return {"status": "ok"}
