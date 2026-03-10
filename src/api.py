@@ -53,17 +53,24 @@ async def predict(data: Input):
     cluster_idx = labels[0]
 
     # 4. Calculate Raw Similarity
-    all_centers = dm.get_centers()
-    raw_sim = float(cosine_similarity(user_emb, [all_centers[cluster_idx]])[0][0])
-    
-    # 5. CONFIDENCE SCALING LOGIC
-    # Map raw similarity (0.3 to 0.8) to UI percentage (0.0 to 1.0)
-    # This ensures that a "good" match shows up as 70-90% instead of 30-40%
-    if raw_sim < 0.3:
-        ui_confidence = raw_sim # Keep it low if it's truly bad
-    else:
-        ui_confidence = (raw_sim - 0.3) / (0.8 - 0.3)
-    ui_confidence = max(0.1, min(0.98, ui_confidence)) # Bound it between 10% and 98%
+all_centers = dm.get_centers()
+raw_sim = float(cosine_similarity(user_emb, [all_centers[cluster_idx]])[0][0])
+
+# 5. IMPROVED CONFIDENCE SCALING
+# We now assume 0.4 is a "good enough" match and 0.7 is "perfect"
+# Logic: (raw_score - floor) / (ceiling - floor)
+floor = 0.35
+ceiling = 0.75
+
+if raw_sim < floor:
+    # If it's below the floor, it's a very weak match (shows as < 10%)
+    ui_confidence = (raw_sim / floor) * 0.2 
+else:
+    # Scale the range [0.35, 0.75] to [20%, 98%]
+    ui_confidence = 0.2 + (raw_sim - floor) / (ceiling - floor) * 0.78
+
+# Ensure the percentage stays within logical bounds
+ui_confidence = max(0.05, min(0.98, ui_confidence))
 
     # 6. Identify Disease
     is_new = str(cluster_idx) not in cluster_mapping
