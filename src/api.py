@@ -18,9 +18,9 @@ model = SentenceTransformer("paraphrase-MiniLM-L3-v2")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
-# Load Initial Dynamic State
+# 1. Initialize Global Dynamic Memory
 initial_centers = np.load(os.path.join(DATA_DIR, "cluster_centers.npy"))
-dm = DynMeans(lambda_dist=0.8) # Threshold set to 0.8
+dm = DynMeans(lambda_dist=0.8) 
 dm.centers = list(initial_centers)
 dm.counts = [1] * len(initial_centers)
 dm.inactive = [0] * len(initial_centers)
@@ -34,7 +34,7 @@ def map_specialist(disease: str) -> str:
         "Pulmonologist": ["pneumonia", "asthma", "bronchitis", "cough"],
         "Dermatologist": ["fungal", "eczema", "psoriasis", "rash", "acne"],
         "Cardiologist": ["hypertension", "heart", "chest pain"],
-        "Gastroenterologist": ["gerd", "peptic ulcer", "jaundice", "typhoid"]
+        "Gastroenterologist": ["gerd", "peptic ulcer", "jaundice", "typhoid", "cholera"]
     }
     for spec, keywords in mapping.items():
         if any(k in d for k in keywords): return spec
@@ -45,23 +45,37 @@ async def predict(data: Input):
     text = data.symptom_text.strip()
     if not text: return {"disease_label": "No input", "confidence": 0.0}
 
+    # 2. Generate User Embedding
     user_emb = model.encode([text])
     
-    # Run through DynMeans for real-time adaptation
+    # 3. Dynamic Step: Run through DynMeans
     labels = dm.fit_batch(user_emb)
     cluster_idx = labels[0]
 
+    # 4. Calculate Raw Similarity
     all_centers = dm.get_centers()
-    similarity = float(cosine_similarity(user_emb, [all_centers[cluster_idx]])[0][0])
+    raw_sim = float(cosine_similarity(user_emb, [all_centers[cluster_idx]])[0][0])
     
+    # 5. CONFIDENCE SCALING LOGIC
+    # Map raw similarity (0.3 to 0.8) to UI percentage (0.0 to 1.0)
+    # This ensures that a "good" match shows up as 70-90% instead of 30-40%
+    if raw_sim < 0.3:
+        ui_confidence = raw_sim # Keep it low if it's truly bad
+    else:
+        ui_confidence = (raw_sim - 0.3) / (0.8 - 0.3)
+        ui_confidence = max(0.1, min(0.98, ui_confidence)) # Bound it between 10% and 98%
+
+    # 6. Identify Disease
+    is_new = str(cluster_idx) not in cluster_mapping
     disease = cluster_mapping.get(str(cluster_idx), "Unidentified Symptom Pattern")
-    specialist = map_specialist(disease) if disease != "Unidentified Symptom Pattern" else "General Physician"
+    specialist = map_specialist(disease) if not is_new else "General Physician"
 
     return {
         "disease_label": disease.title(),
         "recommended_specialist": specialist,
-        "confidence": round(similarity, 3),
-        "is_dynamic_discovery": str(cluster_idx) not in cluster_mapping
+        "confidence": round(ui_confidence, 3), 
+        "is_dynamic_discovery": is_new,
+        "debug_raw_score": round(raw_sim, 3) # Useful for your presentation
     }
 
 @app.get("/health")
