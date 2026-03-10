@@ -6,110 +6,63 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+from dynmeans import DynMeans
 
-# ------------------ App Setup ------------------
-app = FastAPI(title="Smart Medical Triage API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="Smart Dynamic Triage API")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 class Input(BaseModel):
     symptom_text: str
 
-# ------------------ Load Model ------------------
 model = SentenceTransformer("paraphrase-MiniLM-L3-v2")
-
-# ------------------ Load Training Data ------------------
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
-# Load cleaned dataset
-data = np.load(os.path.join(DATA_DIR, "embeddings.npy"))
-with open(os.path.join(DATA_DIR, "Symptom2Disease_cleaned.csv"), "r", encoding="utf-8") as f:
-    import pandas as pd
-    df = pd.read_csv(f)
+# Load Initial Dynamic State
+initial_centers = np.load(os.path.join(DATA_DIR, "cluster_centers.npy"))
+dm = DynMeans(lambda_dist=0.8) # Threshold set to 0.8
+dm.centers = list(initial_centers)
+dm.counts = [1] * len(initial_centers)
+dm.inactive = [0] * len(initial_centers)
 
-train_embeddings = data
-train_diseases = df["disease"].tolist()
-
-# ------------------ Specialist Mapping ------------------
+with open(os.path.join(DATA_DIR, "cluster_mapping.json"), "r") as f:
+    cluster_mapping = json.load(f)
 
 def map_specialist(disease: str) -> str:
     d = disease.lower()
-
-    if any(x in d for x in ["pneumonia", "asthma", "bronchitis"]):
-        return "Pulmonologist"
-
-    if any(x in d for x in ["fungal", "eczema", "psoriasis", "allergy"]):
-        return "Dermatologist"
-
-    if any(x in d for x in ["malaria", "dengue", "typhoid", "viral"]):
-        return "General Physician"
-
+    mapping = {
+        "Pulmonologist": ["pneumonia", "asthma", "bronchitis", "cough"],
+        "Dermatologist": ["fungal", "eczema", "psoriasis", "rash", "acne"],
+        "Cardiologist": ["hypertension", "heart", "chest pain"],
+        "Gastroenterologist": ["gerd", "peptic ulcer", "jaundice", "typhoid"]
+    }
+    for spec, keywords in mapping.items():
+        if any(k in d for k in keywords): return spec
     return "General Physician"
-
-# ------------------ Validation ------------------
-
-def is_medical(text: str) -> bool:
-    medical_words = [
-        "fever","pain","cough","cold","rash","itch",
-        "vomit","headache","breath","chest","diarrhea",
-        "nausea","stomach","burning","vision","dizziness",
-        "skin","weakness","tiredness"
-    ]
-    return any(word in text.lower() for word in medical_words)
-
-# ------------------ Prediction ------------------
 
 @app.post("/predict_specialist")
 async def predict(data: Input):
+    text = data.symptom_text.strip()
+    if not text: return {"disease_label": "No input", "confidence": 0.0}
 
-    text = data.symptom_text.strip().lower()
+    user_emb = model.encode([text])
+    
+    # Run through DynMeans for real-time adaptation
+    labels = dm.fit_batch(user_emb)
+    cluster_idx = labels[0]
 
-    if not text:
-        return {
-            "disease_label": "No input provided",
-            "recommended_specialist": "N/A",
-            "confidence": 0.0
-        }
-
-    if not is_medical(text):
-        return {
-            "disease_label": "Not a medical symptom",
-            "recommended_specialist": "N/A",
-            "confidence": 0.0
-        }
-
-    # Generate embedding
-    emb = model.encode([text])
-
-    # Compare with ALL training embeddings
-    similarities = cosine_similarity(emb, train_embeddings)[0]
-
-    best_idx = int(np.argmax(similarities))
-    confidence = float(round(similarities[best_idx], 3))
-
-    disease = train_diseases[best_idx]
-    specialist = map_specialist(disease)
-
-    # If extremely low similarity → fallback
-    if confidence < 0.2:
-        return {
-            "disease_label": "Symptoms unclear. Please provide more details.",
-            "recommended_specialist": "General Physician",
-            "confidence": confidence
-        }
+    all_centers = dm.get_centers()
+    similarity = float(cosine_similarity(user_emb, [all_centers[cluster_idx]])[0][0])
+    
+    disease = cluster_mapping.get(str(cluster_idx), "Unidentified Symptom Pattern")
+    specialist = map_specialist(disease) if disease != "Unidentified Symptom Pattern" else "General Physician"
 
     return {
-        "disease_label": disease,
+        "disease_label": disease.title(),
         "recommended_specialist": specialist,
-        "confidence": confidence
+        "confidence": round(similarity, 3),
+        "is_dynamic_discovery": str(cluster_idx) not in cluster_mapping
     }
 
 @app.get("/health")
-def health():
-    return {"status": "ok"}
+def health(): return {"status": "ok"}
