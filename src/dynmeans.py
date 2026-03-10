@@ -1,7 +1,7 @@
 import numpy as np
 
 class DynMeans:
-    def __init__(self, lambda_dist=0.75, max_inactive=3):
+    def __init__(self, lambda_dist=0.75, max_inactive=10):
         self.lambda_dist = lambda_dist
         self.max_inactive = max_inactive
         self.centers = []
@@ -10,7 +10,6 @@ class DynMeans:
 
     def fit_batch(self, X):
         labels = []
-
         for x in X:
             if len(self.centers) == 0:
                 self.centers.append(x.copy())
@@ -37,15 +36,7 @@ class DynMeans:
             for i in range(len(self.inactive)):
                 if i != idx:
                     self.inactive[i] += 1
-
-        self._prune()
         return labels
-
-    def _prune(self):
-        keep = [i for i, a in enumerate(self.inactive) if a <= self.max_inactive]
-        self.centers = [self.centers[i] for i in keep]
-        self.counts = [self.counts[i] for i in keep]
-        self.inactive = [self.inactive[i] for i in keep]
 
     def get_centers(self):
         return np.array(self.centers)
