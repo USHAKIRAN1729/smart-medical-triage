@@ -63,7 +63,7 @@ async def predict(data: Input):
         ui_confidence = raw_sim # Keep it low if it's truly bad
     else:
         ui_confidence = (raw_sim - 0.3) / (0.8 - 0.3)
-        ui_confidence = max(0.1, min(0.98, ui_confidence)) # Bound it between 10% and 98%
+    ui_confidence = max(0.1, min(0.98, ui_confidence)) # Bound it between 10% and 98%
 
     # 6. Identify Disease
     is_new = str(cluster_idx) not in cluster_mapping
