@@ -53,24 +53,21 @@ async def predict(data: Input):
     cluster_idx = labels[0]
 
     # 4. Calculate Raw Similarity
-all_centers = dm.get_centers()
-raw_sim = float(cosine_similarity(user_emb, [all_centers[cluster_idx]])[0][0])
+    all_centers = dm.get_centers()
+    raw_sim = float(cosine_similarity(user_emb, [all_centers[cluster_idx]])[0][0])
 
-# 5. IMPROVED CONFIDENCE SCALING
-# We now assume 0.4 is a "good enough" match and 0.7 is "perfect"
-# Logic: (raw_score - floor) / (ceiling - floor)
-floor = 0.35
-ceiling = 0.75
+    # 5. IMPROVED CONFIDENCE SCALING (Fixed Syntax)
+    # Mapping raw scores to a 0-100% human-readable scale
+    floor = 0.35
+    ceiling = 0.75
 
-if raw_sim < floor:
-    # If it's below the floor, it's a very weak match (shows as < 10%)
-    ui_confidence = (raw_sim / floor) * 0.2 
-else:
-    # Scale the range [0.35, 0.75] to [20%, 98%]
-    ui_confidence = 0.2 + (raw_sim - floor) / (ceiling - floor) * 0.78
+    if raw_sim < floor:
+        ui_confidence = (raw_sim / floor) * 0.2 
+    else:
+        # Scale the range [0.35, 0.75] to [20%, 98%]
+        ui_confidence = 0.2 + (raw_sim - floor) / (ceiling - floor) * 0.78
 
-# Ensure the percentage stays within logical bounds
-ui_confidence = max(0.05, min(0.98, ui_confidence))
+    ui_confidence = max(0.05, min(0.98, ui_confidence))
 
     # 6. Identify Disease
     is_new = str(cluster_idx) not in cluster_mapping
@@ -82,7 +79,7 @@ ui_confidence = max(0.05, min(0.98, ui_confidence))
         "recommended_specialist": specialist,
         "confidence": round(ui_confidence, 3), 
         "is_dynamic_discovery": is_new,
-        "debug_raw_score": round(raw_sim, 3) # Useful for your presentation
+        "debug_raw_score": round(raw_sim, 3) 
     }
 
 @app.get("/health")
